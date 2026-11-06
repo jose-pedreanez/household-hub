@@ -1,0 +1,18 @@
+# Development override: run the hub on the host with hot reload, keep everything else in Docker.
+#
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d
+#   cd apps/web && npm run dev            # http://localhost:3000 (camera works on localhost)
+#
+# Caddy keeps serving HTTPS on the LAN and proxies to the host dev server, so phones can test /scan.
+
+services:
+  hub:
+    # Not started in development; the host runs `npm run dev` instead.
+    profiles: ["container-hub"]
+
+  caddy:
+    depends_on: !reset {}
+    environment:
+      HUB_UPSTREAM: host.docker.internal:3000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

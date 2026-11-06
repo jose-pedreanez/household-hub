@@ -1,0 +1,67 @@
+# Retailer preferences and product sourcing rules (version-controlled, no secrets).
+# Copy to retailers.yaml and edit.
+#
+# Adapters:
+#   manual    — the hub produces a list to copy, share, print or email. No retailer API is called.
+#   instacart — creates an Instacart shopping-list page (needs INSTACART_API_KEY). The shopper picks
+#               the store on Instacart's page; availability there is not visible to the hub.
+# No adapter adds to a cart or places an order. Every purchase is made by a person.
+
+retailers:
+  - id: trader_joes
+    name: Trader Joe's (Alameda)
+    adapter: manual
+    # Name of the matching Grocy "store" (shopping location) used when receiving.
+    grocyStore: Trader Joe's
+    # Optional list section order for the in-store list (Mealie labels / Grocy product groups).
+    sectionOrder: [Produce, Bakery, Dairy, Meat, Frozen, Pantry]
+
+  - id: grocery_outlet
+    name: Grocery Outlet (Alameda)
+    adapter: manual
+    grocyStore: Grocery Outlet
+
+  - id: amazon_fresh
+    name: Amazon Fresh
+    adapter: manual
+    grocyStore: Amazon Fresh
+    # Plain links to the retailer's public search page, opened by the shopper. Not an API.
+    searchUrlTemplate: "https://www.amazon.com/s?k={query}&i=amazonfresh"
+
+defaults:
+  # Where items without a product rule are bought.
+  preferredRetailer: trader_joes
+  # Substitutions never happen silently unless a rule sets requiresApproval: false.
+  substitutionsRequireApproval: true
+
+# Product rules, keyed by Mealie food name (case-insensitive).
+# packageSize units: g, kg, oz, lb, ml, l, floz, cup, pint, quart, gallon, or "piece".
+products:
+  - food: Milk
+    preferred:
+      retailer: trader_joes
+      product: Organic whole milk, half gallon
+      packageSize: { amount: 0.5, unit: gallon }
+    backups:
+      - retailer: amazon_fresh
+        product: Organic whole milk, half gallon
+        packageSize: { amount: 0.5, unit: gallon }
+    substitutions:
+      - food: Oat milk
+        requiresApproval: true
+
+  - food: Eggs
+    preferred:
+      retailer: trader_joes
+      product: Large eggs, dozen
+      packageSize: { amount: 12, unit: piece }
+
+  - food: Pasta
+    preferred:
+      retailer: grocery_outlet
+      product: Any dry pasta, 1 lb
+      packageSize: { amount: 1, unit: lb }
+    backups:
+      - retailer: trader_joes
+        product: Dry pasta, 1 lb
+        packageSize: { amount: 1, unit: lb }

@@ -1,0 +1,11 @@
+node_modules
+.next
+.data
+test-results
+playwright-report
+tests/e2e/.auth
+tests/fixtures/generated
+*.log
+.env*
+Dockerfile
+.dockerignore

@@ -1,0 +1,188 @@
+{
+  "id": "ad172de225244d85",
+  "name": "Household Hub · Inventory reconciliation",
+  "active": false,
+  "nodes": [
+    {
+      "id": "8aeed50a-793a-43fd-a580-a7d7f86f8424",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -320
+      ],
+      "parameters": {
+        "content": "## Inventory reconciliation\nSunday 18:00. Lists opened, perishable (product groups in config) and past-date items worth a quick physical check. Corrections are made on the product page in the hub (“Correct the count”).",
+        "height": 200,
+        "width": 520
+      }
+    },
+    {
+      "id": "5c04e91f-549c-4822-a826-dd6f9fc5e5c3",
+      "name": "Sunday 18:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * 0"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "225f8fca-cc7a-4522-a105-7aafa1927e2d",
+      "name": "Find items to check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://hub:3000/api/automation/audit",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hubApiToken",
+          "name": "Household Hub API token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "6a44d7f7-b326-40c5-a2a4-4a1b4f3235d4",
+      "name": "Anything to check?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0312aae9-7c8f-4e97-a039-0f7c809742f1",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1f968f7b-8f12-4100-a3a8-a2656e9ae719",
+      "name": "Send push notification (optional)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        -120
+      ],
+      "disabled": true,
+      "notes": "Replace <your-private-topic> with your own ntfy topic, or swap this node for Email/Slack. The message is also in the hub's notification feed.",
+      "parameters": {
+        "method": "POST",
+        "url": "https://ntfy.sh/<your-private-topic>",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Title",
+              "value": "Quick inventory check"
+            },
+            {
+              "name": "Click",
+              "value": "={{ $json.link || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={{ $json.message }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Sunday 18:00": {
+      "main": [
+        [
+          {
+            "node": "Find items to check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find items to check": {
+      "main": [
+        [
+          {
+            "node": "Anything to check?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything to check?": {
+      "main": [
+        [
+          {
+            "node": "Send push notification (optional)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [],
+  "description": "Weekly prompt to audit uncertain or perishable stock."
+}

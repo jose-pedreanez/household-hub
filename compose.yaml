@@ -1,0 +1,223 @@
+# Household Hub — production-style stack.
+#
+# Exposure model:
+#   * Only Caddy publishes ports on the LAN (80 → CA download/redirect, 443 → hub, 9443 → Mealie).
+#   * Grocy, Mealie, Grocy-Mealie Sync, n8n and the raw hub port bind to 127.0.0.1 for admin use only.
+#   * Every service shares one private bridge network; API keys live only in .env and server containers.
+#
+# Image versions are pinned. Upgrade one service at a time (see docs/deployment.md).
+
+name: household-hub
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  grocy:
+    image: lscr.io/linuxserver/grocy:v4.7.1-ls345
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: ${TZ:-America/Los_Angeles}
+      # Grocy reads GROCY_<SETTING> environment overrides for config.php settings.
+      GROCY_CURRENCY: ${GROCY_CURRENCY:-USD}
+      GROCY_CULTURE: en
+      GROCY_ENERGY_UNIT: kcal
+      GROCY_CALENDAR_FIRST_DAY_OF_WEEK: "1"
+    volumes:
+      - grocy-config:/config
+    ports:
+      - "127.0.0.1:${GROCY_ADMIN_PORT:-9283}:80"
+    networks: [private]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://127.0.0.1:80/login || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    logging: *default-logging
+
+  mealie:
+    image: ghcr.io/mealie-recipes/mealie:v3.28.0
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: ${TZ:-America/Los_Angeles}
+      ALLOW_SIGNUP: "false"
+      BASE_URL: ${MEALIE_PUBLIC_URL:-https://localhost:9443}
+      MAX_WORKERS: "1"
+      WEB_CONCURRENCY: "1"
+      # SQLite (the default) keeps Mealie self-contained; no separate database service.
+      DB_ENGINE: sqlite
+    volumes:
+      - mealie-data:/app/data
+    ports:
+      - "127.0.0.1:${MEALIE_ADMIN_PORT:-9925}:9000"
+    networks: [private]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/api/app/about', timeout=4)"]
+      interval: 30s
+      timeout: 6s
+      retries: 5
+      start_period: 60s
+    logging: *default-logging
+
+  gms:
+    image: ghcr.io/harmellis/grocy-mealie-sync:1.18.0
+    restart: unless-stopped
+    depends_on:
+      grocy: { condition: service_healthy }
+      mealie: { condition: service_healthy }
+    environment:
+      TZ: ${TZ:-America/Los_Angeles}
+      GROCY_URL: http://grocy:80
+      GROCY_API_KEY: ${GROCY_API_KEY:-}
+      MEALIE_URL: http://mealie:9000
+      MEALIE_API_TOKEN: ${MEALIE_API_TOKEN:-}
+      AUTH_SECRET: ${GMS_AUTH_SECRET:?set GMS_AUTH_SECRET in .env}
+      DATABASE_PATH: ./data/sync.db
+      POLL_INTERVAL_SECONDS: "60"
+      PRODUCT_SYNC_INTERVAL_HOURS: "6"
+      MEALIE_SHOPPING_LIST_ID: ${MEALIE_NEEDS_LIST_ID:-}
+      # Mappings are curated (by the hub or the GMS mapping wizard), never guessed into existence.
+      AUTO_CREATE_PRODUCTS: "false"
+      AUTO_CREATE_UNITS: "false"
+      SYNC_MEALIE_IN_POSSESSION: "true"
+      SYNC_SUB_PRODUCTS: "true"
+      ENSURE_LOW_STOCK_ON_MEALIE_LIST: "true"
+      # Check-off restocking only applies to the "needs" list, and only to products with a min stock.
+      # The hub never checks rows on that list; receiving happens through /scan. See docs/architecture.md.
+      STOCK_ONLY_MIN_STOCK: "true"
+      HISTORY_RETENTION_DAYS: "30"
+      MCP_ENABLED: "false"
+    volumes:
+      - gms-data:/app/data
+    ports:
+      - "127.0.0.1:${GMS_ADMIN_PORT:-3001}:3000"
+    networks: [private]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging: *default-logging
+
+  n8n:
+    image: n8nio/n8n:2.44.4
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/Los_Angeles}
+      GENERIC_TIMEZONE: ${TZ:-America/Los_Angeles}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      # n8n is bound to 127.0.0.1 and served over plain HTTP locally.
+      N8N_SECURE_COOKIE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_HIRING_BANNER_ENABLED: "false"
+      HUB_INTERNAL_URL: http://hub:3000
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ./workflows/n8n:/workflows:ro
+    ports:
+      - "127.0.0.1:${N8N_ADMIN_PORT:-5678}:5678"
+    networks: [private]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    logging: *default-logging
+
+  hub:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    image: household-hub/web:${HUB_IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      grocy: { condition: service_healthy }
+      mealie: { condition: service_healthy }
+    environment:
+      TZ: ${TZ:-America/Los_Angeles}
+      NODE_ENV: production
+      HUB_DATA_DIR: /data
+      HUB_CONFIG_DIR: /config
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://localhost}
+      MEALIE_PUBLIC_URL: ${MEALIE_PUBLIC_URL:-https://localhost:9443}
+      HUB_PASSWORD: ${HUB_PASSWORD:?set HUB_PASSWORD in .env}
+      HUB_SESSION_SECRET: ${HUB_SESSION_SECRET:?set HUB_SESSION_SECRET in .env}
+      HUB_API_TOKEN: ${HUB_API_TOKEN:?set HUB_API_TOKEN in .env}
+      GROCY_URL: http://grocy:80
+      GROCY_API_KEY: ${GROCY_API_KEY:-}
+      MEALIE_URL: http://mealie:9000
+      MEALIE_API_TOKEN: ${MEALIE_API_TOKEN:-}
+      MEALIE_NEEDS_LIST_ID: ${MEALIE_NEEDS_LIST_ID:-}
+      GMS_URL: http://gms:3000
+      GMS_AUTH_SECRET: ${GMS_AUTH_SECRET:?set GMS_AUTH_SECRET in .env}
+      OFF_USER_AGENT: ${OFF_USER_AGENT:-HouseholdHub/0.1 (self-hosted)}
+      AI_PROVIDER: ${AI_PROVIDER:-none}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      INSTACART_API_KEY: ${INSTACART_API_KEY:-}
+      INSTACART_ENV: ${INSTACART_ENV:-development}
+    volumes:
+      - hub-data:/data
+      - ./config:/config:ro
+    ports:
+      - "127.0.0.1:${HUB_LOCAL_PORT:-3000}:3000"
+    networks: [private]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2.11.7-alpine
+    restart: unless-stopped
+    depends_on:
+      hub: { condition: service_started }
+    environment:
+      HUB_HOSTNAME: ${HUB_HOSTNAME:-localhost}
+      HUB_UPSTREAM: ${HUB_UPSTREAM:-hub:3000}
+    volumes:
+      - ./infrastructure/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "${LAN_BIND:-0.0.0.0}:80:80"
+      - "${LAN_BIND:-0.0.0.0}:443:443"
+      - "${LAN_BIND:-0.0.0.0}:9443:9443"
+    networks: [private]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+networks:
+  private:
+    driver: bridge
+
+volumes:
+  grocy-config:
+  mealie-data:
+  gms-data:
+  n8n-data:
+  hub-data:
+  caddy-data:
+  caddy-config:

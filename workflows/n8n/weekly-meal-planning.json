@@ -1,0 +1,188 @@
+{
+  "id": "87489a1b5d064773",
+  "name": "Household Hub · Weekly meal planning",
+  "active": false,
+  "nodes": [
+    {
+      "id": "7eae476e-2fbd-4768-aae8-6e76866d420c",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -320
+      ],
+      "parameters": {
+        "content": "## Weekly meal planning\nSaturday 09:00. Asks the hub for a draft plan for next week's empty slots (cloud AI if configured, otherwise the built-in planner). The draft is **not** written to Mealie: someone reviews and saves it on /meals. A notification is added to the hub's feed.",
+        "height": 200,
+        "width": 520
+      }
+    },
+    {
+      "id": "3b352655-232c-4328-a456-6feed4571dec",
+      "name": "Saturday 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 6"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ed10caeb-8983-45c1-a9d1-7ae7929e7c0d",
+      "name": "Draft next week's plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://hub:3000/api/automation/meal-plan",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hubApiToken",
+          "name": "Household Hub API token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "f8c0c44f-503d-4c80-acc7-0a6e3c66c9f3",
+      "name": "Draft created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4f0029af-cf5d-48ad-a511-cf00612eeab6",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4dc208f9-62f5-4150-a873-e5b2f77cd4f0",
+      "name": "Send push notification (optional)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        -120
+      ],
+      "disabled": true,
+      "notes": "Replace <your-private-topic> with your own ntfy topic, or swap this node for Email/Slack. The message is also in the hub's notification feed.",
+      "parameters": {
+        "method": "POST",
+        "url": "https://ntfy.sh/<your-private-topic>",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Title",
+              "value": "Meal plan draft ready"
+            },
+            {
+              "name": "Click",
+              "value": "={{ $json.link || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={{ $json.message }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Saturday 09:00": {
+      "main": [
+        [
+          {
+            "node": "Draft next week's plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft next week's plan": {
+      "main": [
+        [
+          {
+            "node": "Draft created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft created?": {
+      "main": [
+        [
+          {
+            "node": "Send push notification (optional)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [],
+  "description": "Drafts next week's meals from inventory and preferences; a person approves them."
+}

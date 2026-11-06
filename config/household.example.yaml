@@ -1,0 +1,44 @@
+# Household preferences used by the meal planner, alerts and cooking flow.
+# Copy to household.yaml and edit. This file holds preferences only — never secrets.
+
+household:
+  name: Our household
+  # Default servings for a planned meal when neither the plan nor the recipe says otherwise.
+  defaultServings: 2
+
+meals:
+  # Slots shown in the weekly calendar (Mealie entry types).
+  slots: [breakfast, lunch, dinner, snack]
+  # Slots the planner fills by default.
+  plannerSlots: [dinner]
+  # Maximum total cooking time the planner should aim for, in minutes.
+  maxCookingMinutes:
+    weeknight: 45
+    weekend: 90
+  equipment: [oven, stovetop, microwave]
+  preferences:
+    likes: []
+    dislikes: []
+    cuisines: []
+  # Only restrictions listed here are applied. Nothing is assumed.
+  dietaryRestrictions: []
+  # Mealie tag that marks household favourites (recipes rated 4+ also count).
+  favoritesTag: favorite
+  # Avoid repeating a recipe cooked within this many days.
+  avoidRepeatDays: 7
+  # Nutrition is shown for information only; no calorie targets are applied.
+  showNutrition: true
+
+cooking:
+  # When false, Mealie-defined ingredient substitutions are offered but must be ticked by hand.
+  autoApproveMealieSubstitutions: false
+
+inventory:
+  # Products due within this many days are "expiring soon".
+  expiringSoonDays: 4
+  # Perishable product groups the weekly audit asks about (Grocy product group names).
+  auditProductGroups: []
+
+alerts:
+  # The same alert (same products, same state) is not repeated within this window.
+  repeatAfterHours: 24

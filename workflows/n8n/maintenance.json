@@ -1,0 +1,98 @@
+{
+  "id": "a1a368d94aa04026",
+  "name": "Household Hub · Maintenance",
+  "active": false,
+  "nodes": [
+    {
+      "id": "c1147006-3e6f-46ca-a783-55d91a48903f",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -320
+      ],
+      "parameters": {
+        "content": "## Maintenance\nEvery 6 hours. Retries Mealie “last made” / timeline updates for meals whose stock was already deducted while Mealie was unreachable. Never changes stock.",
+        "height": 200,
+        "width": 520
+      }
+    },
+    {
+      "id": "bc05b5a2-b551-4919-adf0-51c0e0eaf31a",
+      "name": "Every 6 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */6 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "326d5116-31ec-42f9-ae32-7f5e11c6f497",
+      "name": "Sync cooking records to Mealie",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://hub:3000/api/automation/maintenance",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hubApiToken",
+          "name": "Household Hub API token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Every 6 hours": {
+      "main": [
+        [
+          {
+            "node": "Sync cooking records to Mealie",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [],
+  "description": "Retries best-effort Mealie bookkeeping."
+}

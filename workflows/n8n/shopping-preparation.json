@@ -1,0 +1,188 @@
+{
+  "id": "bf9be09c79d74f13",
+  "name": "Household Hub · Shopping preparation",
+  "active": false,
+  "nodes": [
+    {
+      "id": "b4c4fdb9-a2ca-439a-a478-f91df8c056fd",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -320
+      ],
+      "parameters": {
+        "content": "## Shopping preparation\nSaturday 10:00. Computes ingredients for the next 7 days of planned meals, subtracts usable stock, adds low-stock items, and updates the per-store lists (Trader Joe's, Grocery Outlet, Amazon Fresh) in Mealie. Idempotent. Never orders anything.",
+        "height": 200,
+        "width": 520
+      }
+    },
+    {
+      "id": "eb71b85e-b59b-429c-afb8-72d81c7f7f7f",
+      "name": "Saturday 10:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * 6"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f579e88a-b579-4214-a11f-860a5c531b49",
+      "name": "Update store lists",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://hub:3000/api/automation/shopping",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hubApiToken",
+          "name": "Household Hub API token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "561995e2-2c2d-404e-a045-c28c43d4c833",
+      "name": "Lists changed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c6118c36-5304-44eb-a4c4-b7b33141e93b",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b0169fe5-691f-4b7b-aeb7-35d5c81b8dac",
+      "name": "Send push notification (optional)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        -120
+      ],
+      "disabled": true,
+      "notes": "Replace <your-private-topic> with your own ntfy topic, or swap this node for Email/Slack. The message is also in the hub's notification feed.",
+      "parameters": {
+        "method": "POST",
+        "url": "https://ntfy.sh/<your-private-topic>",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Title",
+              "value": "Shopping lists updated"
+            },
+            {
+              "name": "Click",
+              "value": "={{ $json.link || '' }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={{ $json.message }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Saturday 10:00": {
+      "main": [
+        [
+          {
+            "node": "Update store lists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update store lists": {
+      "main": [
+        [
+          {
+            "node": "Lists changed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lists changed?": {
+      "main": [
+        [
+          {
+            "node": "Send push notification (optional)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [],
+  "description": "Builds store-specific shopping lists from the meal plan and stock."
+}

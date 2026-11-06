@@ -99,3 +99,4 @@ Without the real files the hub uses the examples and the Settings page says so.
 | UI + API end to end (login, camera scan, scanner, registration, cooking, shopping, planner, assistant, secrets) | 20 browser tests pass **against mock upstreams** |
 | Real Grocy / Mealie / GMS / n8n, Docker image, bootstrap, backups, phone HTTPS | **not yet run** — Docker was not accessible on the build machine; see [known limitations](docs/known-limitations.md) |
 # household-hub
+# household-hub

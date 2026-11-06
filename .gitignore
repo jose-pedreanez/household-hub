@@ -1,0 +1,37 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Persistent data, backups and logs never belong in git
+/data/
+/backups/
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Test output
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/tests/e2e/.auth/
+apps/web/tests/fixtures/generated/
+
+# Local certificates
+*.pem
+*.crt
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json

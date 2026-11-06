@@ -1,0 +1,56 @@
+# Household Hub reverse proxy.
+#
+# HUB_HOSTNAME is the LAN address phones use (an IP such as 192.168.1.105, or a local DNS name).
+# Certificates come from Caddy's internal CA; install its root certificate on each phone once:
+#   http://<HUB_HOSTNAME>/ca.crt   (see docs/deployment.md#phone-https)
+
+{
+	# Clients that connect by IP address (notably iOS Safari) send no SNI; serve the hub certificate.
+	default_sni {$HUB_HOSTNAME}
+	# Prevent Caddy from trying to install its root CA into the container trust store.
+	skip_install_trust
+	# The http:// site below does the redirecting itself, so /ca.crt stays reachable over plain HTTP
+	# (Caddy's automatic HTTP→HTTPS redirect for the hub's hostname would otherwise take precedence).
+	auto_https disable_redirects
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+}
+
+# Household Hub (Next.js) — the only household-facing app.
+https://{$HUB_HOSTNAME} {
+	tls internal
+	import security_headers
+	encode zstd gzip
+	reverse_proxy {$HUB_UPSTREAM}
+}
+
+# Mealie, for recipe editing on phones and laptops (Mealie has its own login).
+https://{$HUB_HOSTNAME}:9443 {
+	tls internal
+	import security_headers
+	encode zstd gzip
+	reverse_proxy mealie:9000
+}
+
+# Plain HTTP: only the CA certificate download; everything else is redirected to HTTPS.
+http:// {
+	handle /ca.crt {
+		root * /data/caddy/pki/authorities/local
+		rewrite * /root.crt
+		header Content-Type application/x-x509-ca-cert
+		file_server
+	}
+	handle {
+		redir https://{host}{uri} permanent
+	}
+}

@@ -1,0 +1,95 @@
+{
+  "id": "f0163ea8b40742aa",
+  "name": "Household Hub · Receipt ingestion (template)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "9f3e669f-f1ca-46b7-a67e-c0ee1b0cfdb1",
+      "name": "About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -320
+      ],
+      "parameters": {
+        "content": "## Receipt ingestion (template, inactive)\nReplace the webhook with your receipt source (e.g. an IMAP trigger + parser). Post receipts in the format of `apps/web/lib/receipts.ts`. The hub validates them but does not ingest yet (returns 501): receipts must never add stock directly — scanning is the single source of truth.",
+        "height": 200,
+        "width": 520
+      }
+    },
+    {
+      "id": "f4fbcff4-d320-4cc1-a4a1-76993481a3c2",
+      "name": "Receipt received",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "b7d4381f-eaf8-4ece-a9fd-55f92a228f63",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "household-receipts",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "86724244-855d-43a5-ad73-7c9038e321f9",
+      "name": "Send to hub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://hub:3000/api/automation/receipts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hubApiToken",
+          "name": "Household Hub API token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Receipt received": {
+      "main": [
+        [
+          {
+            "node": "Send to hub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Los_Angeles",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [],
+  "description": "Template for future receipt ingestion."
+}
